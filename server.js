@@ -12,7 +12,6 @@ app.use(bodyParser.json());
 
 
 
-
 // PostgreSQL connection configuration
 const pool = new Pool({
   user: 'postgres',
@@ -21,6 +20,78 @@ const pool = new Pool({
   password: 'n',
   port: 5432,
 });
+
+
+
+/* LOGIN SYSTEM */
+
+// Middleware
+app.use(bodyParser.json());  // เปิดใช้งาน body-parser เพื่อแปลง request body เป็น JSON
+app.use(express.static('public'));  // เสิร์ฟไฟล์ static จากโฟลเดอร์ 'public'
+
+// Endpoint สำหรับล็อคอิน (ไม่ใช้ session)
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    // ดึงข้อมูล user จากฐานข้อมูล
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = result.rows[0];
+
+    // ตรวจสอบว่า username และ password ถูกต้อง
+    if (user && password === user.password) {
+      // ถ้าล็อคอินสำเร็จ, ส่งข้อมูล role กลับไปด้วย
+      res.json({ success: true, role: user.role });
+    } else {
+      // ส่ง error ถ้าข้อมูลล็อคอินไม่ถูกต้อง
+      res.status(401).json({ success: false, message: 'Invalid username or password' });
+    }
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
+
+
+// Serve index page after login (เสิร์ฟหน้า index เมื่อมีการร้องขอ)
+app.get('/html/index.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'html', 'index.html'));  // ส่งไฟล์ index.html ให้ client
+}); 
+
+
+
+
+
+app.get('/checkin-history', async (req, res) => {
+  const { user_id, role } = req.body;  // รับ user_id และ role จาก request body (คุณอาจต้องปรับให้รับจาก session หรือ token ถ้าใช้)
+
+  try {
+    let result;
+    if (role === 'teacher') {
+      // teacher เห็นข้อมูลทั้งหมด
+      result = await pool.query('SELECT * FROM checkin_history');
+    } else if (role === 'student') {
+      // student เห็นเฉพาะข้อมูลของตัวเอง
+      result = await pool.query('SELECT * FROM checkin_history WHERE student_id = $1', [user_id]);
+    }
+
+    res.json({
+      success: true,
+      role: role,
+      history: result.rows,  // ส่งข้อมูล check-in history กลับไป
+    });
+  } catch (error) {
+    console.error('Error fetching checkin history:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
+
+
+
+
 
 
 
